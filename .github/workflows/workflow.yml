@@ -58,6 +58,7 @@ jobs:
             3.11
             3.12
             3.13
+            3.14
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
@@ -84,6 +85,7 @@ jobs:
             3.11
             3.12
             3.13
+            3.14
       - uses: PyO3/maturin-action@v1
         with:
           target: x64
@@ -100,7 +102,7 @@ jobs:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     environment:
-      name: pypi
+      name: pypi-webgraph
       url: https://pypi.org/p/webgraph
     permissions:
       id-token: write
@@ -119,7 +121,7 @@ jobs:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     environment:
-      name: pypi
+      name: pypi-webgraph-swh
       url: https://pypi.org/p/webgraph-swh
     permissions:
       id-token: write
