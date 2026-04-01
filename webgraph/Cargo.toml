@@ -1,6 +1,6 @@
 [package]
 name = "webgraph-py"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2024"
 authors = [
 	"Dario Moschetti <dariomos.dm@gmail.com>",
