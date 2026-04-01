@@ -2,6 +2,12 @@
 name = "webgraph-swh-py"
 version = "0.1.0"
 edition = "2024"
+authors = [
+	"Dario Moschetti <dariomos.dm@gmail.com>",
+	"Sebastiano Vigna <sebastiano.vigna@unimi.it>",
+]
+license = "Apache-2.0 OR LGPL-2.1-or-later"
+repository = "https://github.com/vigna/webgraph-py"
 
 [lib]
 name = "_webgraph_swh"
