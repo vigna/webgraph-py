@@ -1,0 +1,19 @@
+[workspace]
+members = ["webgraph", "webgraph-swh"]
+resolver = "3"
+
+[workspace.dependencies]
+pyo3 = { version = "0.28.2", features = ["extension-module"] }
+numpy = "0.28.0"
+rayon = "1.11.0"
+dary_heap = "0.3.8"
+dsi-bitstream = "0.7.0"
+sux = "0.12.2"
+webgraph = { git = "https://github.com/vigna/webgraph-rs.git", rev = "bcdcb4909aadf0f2cebdafea4335d408edf96035" }
+
+
+[profile.release]
+opt-level = 3
+overflow-checks = false
+debug = true
+debug-assertions = false

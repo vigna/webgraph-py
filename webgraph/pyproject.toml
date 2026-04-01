@@ -1,0 +1,18 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
+[project]
+name = "webgraph"
+version = "0.1.0"
+requires-python = ">=3.10"
+description = "Python bindings for the WebGraph compressed graph framework"
+dependencies = ["numpy"]
+authors = [
+	"Tommaso Fontana <tommaso.fontana.96@gmail.com>",
+	"Sebastiano Vigna <sebastiano.vigna@unimi.it>",
+]
+
+[tool.maturin]
+python-source = "python"
+module-name = "webgraph._webgraph"

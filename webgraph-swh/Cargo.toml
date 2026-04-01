@@ -1,0 +1,17 @@
+[package]
+name = "webgraph-swh-py"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "_webgraph_swh"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { workspace = true }
+numpy = { workspace = true }
+rayon = { workspace = true }
+dary_heap = { workspace = true }
+sux = { workspace = true }
+swh-graph = "11.0.0"
+epserde = "0.12.1"
