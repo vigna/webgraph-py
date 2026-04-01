@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  # Override .cargo/config.toml target-cpu=native for portable binaries
+  CARGO_BUILD_RUSTFLAGS: ""
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [webgraph, webgraph-swh]
+        target: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --find-interpreter
+          working-directory: ${{ matrix.package }}
+          manylinux: auto
+          sccache: true
+          before-script-linux: |
+            dnf install -y clang-devel || yum install -y clang-devel || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels_${{ matrix.package }}_linux-${{ matrix.target }}
+          path: ${{ matrix.package }}/dist/
+
+  macos:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [webgraph, webgraph-swh]
+        platform:
+          - runner: macos-13
+            target: x86_64
+          - runner: macos-14
+            target: aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.10
+            3.11
+            3.12
+            3.13
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter
+          working-directory: ${{ matrix.package }}
+          sccache: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels_${{ matrix.package }}_macos-${{ matrix.platform.target }}
+          path: ${{ matrix.package }}/dist/
+
+  windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [webgraph, webgraph-swh]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.10
+            3.11
+            3.12
+            3.13
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: x64
+          args: --release --out dist --find-interpreter
+          working-directory: ${{ matrix.package }}
+          sccache: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels_${{ matrix.package }}_windows-x64
+          path: ${{ matrix.package }}/dist/
+
+  publish-webgraph:
+    needs: [linux, macos, windows]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/webgraph
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels_webgraph_*
+          path: dist/
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  publish-webgraph-swh:
+    needs: [linux, macos, windows, publish-webgraph]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/webgraph-swh
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels_webgraph-swh_*
+          path: dist/
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
