@@ -29,6 +29,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang
+          python -m venv .venv
+          . .venv/bin/activate
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
           pip install maturin pdoc numpy
       - name: Build webgraph
         run: cd webgraph && maturin develop
