@@ -216,7 +216,7 @@ impl PyBfsIterator {
     }
 }
 
-/// Python bindings for the WebGraph compressed graph framework.
+/// Python bindings for the Rust version of the WebGraph framework.
 #[pymodule]
 fn _webgraph(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BvGraph>()?;

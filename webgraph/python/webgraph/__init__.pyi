@@ -1,4 +1,4 @@
-"""Python bindings for the WebGraph compressed graph framework."""
+"""Python bindings for the Rust version of the WebGraph framework."""
 
 from __future__ import annotations
 

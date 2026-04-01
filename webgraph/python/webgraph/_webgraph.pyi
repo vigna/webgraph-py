@@ -1,4 +1,4 @@
-"""Python bindings for the WebGraph compressed graph framework."""
+"""Python bindings for the Rust version of the WebGraph framework."""
 
 import numpy as np
 import numpy.typing as npt
