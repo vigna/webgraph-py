@@ -1,10 +1,16 @@
 # webgraph
 
+Python bindings for the [Rust version](https://crates.io/crates/webgraph) of the
+[WebGraph](https://webgraph.di.unimi.it/) framework, built with
+[PyO3](https://pyo3.rs/).
+
+WebGraph is a framework for graph compression that allows very large graphs
+(billions of nodes and arcs) to be stored in a compact representation while
+providing fast random access to successors.
+
 ## Building from source
 
-Pre-built wheels are compiled for a generic x86-64 target. If you need
-native optimizations (e.g., BMI2 for faster succinct data structures),
-you can build the wheel from source:
+Pre-built wheels are compiled for a generic target. You should however enable native optimizations (e.g., BMI2 for faster succinct data structures) by building the wheel from source:
 
 ```bash
 pip install maturin
@@ -16,14 +22,6 @@ pip install dist/*.whl
 
 The repository's `.cargo/config.toml` sets `target-cpu=native`, so the
 resulting wheel will be optimized for your CPU.
-
-Python bindings for the [Rust version](https://crates.io/crates/webgraph) of the
-[WebGraph](https://webgraph.di.unimi.it/) framework, built with
-[PyO3](https://pyo3.rs/).
-
-WebGraph is a framework for graph compression that allows very large graphs
-(billions of nodes and arcs) to be stored in a compact representation while
-providing fast random access to successors.
 
 ## Installation
 
