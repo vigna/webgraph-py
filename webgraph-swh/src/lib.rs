@@ -1,4 +1,4 @@
-use _webgraph::{PySuccessorsIterator, check_node, top_k};
+use webgraph_common::{PySuccessorsIterator, check_node, top_k};
 use epserde::deser::{DeserInner, ReaderWithPos, check_header};
 use numpy::PyArray1;
 use pyo3::prelude::*;

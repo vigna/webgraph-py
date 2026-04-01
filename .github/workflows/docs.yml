@@ -35,9 +35,13 @@ jobs:
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
           pip install maturin pdoc numpy
       - name: Build webgraph
-        run: cd webgraph && maturin develop --release
+        run: cd webgraph && maturin develop --release --strip
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: "false"
       - name: Build webgraph-swh
-        run: cd webgraph-swh && maturin develop --release
+        run: cd webgraph-swh && maturin develop --release --strip
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: "false"
       - name: Generate docs
         run: pdoc webgraph webgraph_swh -o site/
       - uses: actions/configure-pages@v5

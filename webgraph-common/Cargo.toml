@@ -1,0 +1,11 @@
+[package]
+name = "webgraph-common"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR LGPL-2.1-or-later"
+publish = false
+
+[dependencies]
+pyo3 = { workspace = true }
+rayon = { workspace = true }
+dary_heap = { workspace = true }

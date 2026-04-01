@@ -1,5 +1,5 @@
 [workspace]
-members = ["webgraph", "webgraph-swh"]
+members = ["webgraph", "webgraph-swh", "webgraph-common"]
 resolver = "3"
 
 [workspace.dependencies]
