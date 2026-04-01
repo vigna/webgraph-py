@@ -1,5 +1,7 @@
 """Python bindings for the WebGraph compressed graph framework."""
 
+from __future__ import annotations
+
 from typing import Iterator
 
 import numpy as np

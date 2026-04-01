@@ -1,5 +1,7 @@
 """Python bindings for Software Heritage graph access."""
 
+from __future__ import annotations
+
 from typing import Iterator
 
 import enum
