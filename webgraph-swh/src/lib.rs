@@ -1,4 +1,3 @@
-use webgraph_common::{PySuccessorsIterator, check_node, top_k};
 use epserde::deser::{DeserInner, ReaderWithPos, check_header};
 use numpy::PyArray1;
 use pyo3::prelude::*;
@@ -17,6 +16,9 @@ use swh_graph::graph::{
     SwhGraphWithProperties,
 };
 use swh_graph::{NodeConstraint, NodeType, properties::*};
+use webgraph_py_common::{
+    PySuccessorsIterator, check_filtered_node, check_node, top_k, top_k_to_ndarray,
+};
 
 type MyProperties = SwhGraphProperties<
     MappedMaps<swh_graph::mph::DynMphf>,
@@ -34,7 +36,7 @@ type SparseEf = EliasFano<SelectZeroAdaptConst<BitVec<Box<[usize]>>, Box<[usize]
 ///
 /// Loads the graph and all available properties (maps, persons, strings,
 /// timestamps) from the given base path. Node IDs are integers in
-/// ``[0, num_nodes)``.
+/// [0 . . `num_nodes`).
 ///
 /// Example::
 ///
@@ -160,6 +162,12 @@ impl SwhGraph {
     #[pyo3(text_signature = "()")]
     pub fn num_nodes(&self) -> usize {
         self.graph.num_nodes()
+    }
+
+    /// Return the number of arcs in the graph.
+    #[pyo3(text_signature = "()")]
+    pub fn num_arcs(&self) -> u64 {
+        self.graph.num_arcs()
     }
 
     /// Return the number of successors of the given node.
@@ -313,6 +321,7 @@ impl SwhGraph {
         let degrees = py.detach(|| {
             (0..graph.num_nodes())
                 .into_par_iter()
+                .with_min_len(1000)
                 .map(|n| graph.outdegree(n) as u32)
                 .collect::<Vec<u32>>()
         });
@@ -327,26 +336,31 @@ impl SwhGraph {
         let degrees = py.detach(|| {
             (0..graph.num_nodes())
                 .into_par_iter()
+                .with_min_len(1000)
                 .map(|n| graph.indegree(n) as u32)
                 .collect::<Vec<u32>>()
         });
         PyArray1::from_vec(py, degrees)
     }
 
-    /// Return the ``k`` nodes with the highest outdegree as a list of
-    /// ``(node, outdegree)`` pairs sorted by decreasing degree.
+    /// Return the ``k`` nodes with the highest outdegree as a numpy
+    /// ``uint64`` array of shape ``(k, 2)`` where column 0 holds node IDs
+    /// and column 1 holds outdegrees, sorted by decreasing degree.
     #[pyo3(text_signature = "(k)")]
-    pub fn top_k_out(&self, py: Python<'_>, k: usize) -> Vec<(usize, u32)> {
+    pub fn top_k_out<'py>(&self, py: Python<'py>, k: usize) -> Bound<'py, numpy::PyArray2<u64>> {
         let graph = &*self.graph;
-        py.detach(|| top_k(graph.num_nodes(), k, |n| graph.outdegree(n) as u32))
+        let result = py.detach(|| top_k(graph.num_nodes(), k, |n| graph.outdegree(n) as u32));
+        top_k_to_ndarray(py, result)
     }
 
-    /// Return the ``k`` nodes with the highest indegree as a list of
-    /// ``(node, indegree)`` pairs sorted by decreasing degree.
+    /// Return the ``k`` nodes with the highest indegree as a numpy
+    /// ``uint64`` array of shape ``(k, 2)`` where column 0 holds node IDs
+    /// and column 1 holds indegrees, sorted by decreasing degree.
     #[pyo3(text_signature = "(k)")]
-    pub fn top_k_in(&self, py: Python<'_>, k: usize) -> Vec<(usize, u32)> {
+    pub fn top_k_in<'py>(&self, py: Python<'py>, k: usize) -> Bound<'py, numpy::PyArray2<u64>> {
         let graph = &*self.graph;
-        py.detach(|| top_k(graph.num_nodes(), k, |n| graph.indegree(n) as u32))
+        let result = py.detach(|| top_k(graph.num_nodes(), k, |n| graph.indegree(n) as u32));
+        top_k_to_ndarray(py, result)
     }
 
     /// Return a FilteredSwhGraph restricted to the given node types.
@@ -400,6 +414,18 @@ impl SwhGraph {
     }
 }
 
+impl FilteredSwhGraph {
+    fn check_node(&self, node: usize) -> PyResult<()> {
+        check_filtered_node(
+            node,
+            self.graph.num_nodes(),
+            self.constraint
+                .matches(self.graph.properties().node_type(node)),
+            &self.constraint_str,
+        )
+    }
+}
+
 #[pymethods]
 impl FilteredSwhGraph {
     /// Return the number of nodes in the underlying (unfiltered) graph.
@@ -410,36 +436,45 @@ impl FilteredSwhGraph {
 
     /// Return the number of successors matching the node-type constraint.
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn outdegree(&self, node: usize) -> PyResult<usize> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         Ok(self
             .graph
             .successors(node)
-            .filter(|&n| self.constraint.matches(self.graph.properties().node_type(n)))
+            .filter(|&n| {
+                self.constraint
+                    .matches(self.graph.properties().node_type(n))
+            })
             .count())
     }
 
     /// Return the number of predecessors matching the node-type constraint.
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn indegree(&self, node: usize) -> PyResult<usize> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         Ok(self
             .graph
             .predecessors(node)
-            .filter(|&n| self.constraint.matches(self.graph.properties().node_type(n)))
+            .filter(|&n| {
+                self.constraint
+                    .matches(self.graph.properties().node_type(n))
+            })
             .count())
     }
 
     /// Return an iterator over successors matching the node-type constraint.
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn successors(&self, node: usize) -> PyResult<PySuccessorsIterator> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         let graph = self.graph.clone();
         let constraint = self.constraint;
         // SAFETY: same as SwhGraph::successors — Rc keeps graph alive,
@@ -458,10 +493,11 @@ impl FilteredSwhGraph {
 
     /// Return an iterator over predecessors matching the node-type constraint.
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn predecessors(&self, node: usize) -> PyResult<PySuccessorsIterator> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         let graph = self.graph.clone();
         let constraint = self.constraint;
         // SAFETY: same as SwhGraph::predecessors.
@@ -489,6 +525,7 @@ impl FilteredSwhGraph {
         let degrees = py.detach(|| {
             (0..graph.num_nodes())
                 .into_par_iter()
+                .with_min_len(1000)
                 .map(|n| {
                     if !constraint.matches(graph.properties().node_type(n)) {
                         return 0;
@@ -515,6 +552,7 @@ impl FilteredSwhGraph {
         let degrees = py.detach(|| {
             (0..graph.num_nodes())
                 .into_par_iter()
+                .with_min_len(1000)
                 .map(|n| {
                     if !constraint.matches(graph.properties().node_type(n)) {
                         return 0;
@@ -531,65 +569,72 @@ impl FilteredSwhGraph {
 
     /// Return the committer person ID, or ``None`` if not available.
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn committer_id(&self, node: usize) -> PyResult<Option<u32>> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         Ok(self.graph.properties().committer_id(node))
     }
 
     /// Return the author person ID, or ``None`` if not available.
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn author_id(&self, node: usize) -> PyResult<Option<u32>> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         Ok(self.graph.properties().author_id(node))
     }
 
     /// Return the node type as a ``PyNodeType`` enum value.
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn node_type(&self, node: usize) -> PyResult<PyNodeType> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         Ok(self.graph.properties().node_type(node).into())
     }
 
     /// Return the committer timestamp (seconds since epoch), or ``None``.
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn committer_timestamp(&self, node: usize) -> PyResult<Option<i64>> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         Ok(self.graph.properties().committer_timestamp(node))
     }
 
     /// Return the author timestamp (seconds since epoch), or ``None``.
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn author_timestamp(&self, node: usize) -> PyResult<Option<i64>> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         Ok(self.graph.properties().author_timestamp(node))
     }
 
     /// Return the SWHID of the given node as a string.
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn swhid(&self, node: usize) -> PyResult<String> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         Ok(self.graph.properties().swhid(node).to_string())
     }
 
     /// Return the URL of the Software Heritage archive page for the given
     /// node (e.g., ``https://archive.softwareheritage.org/swh:1:rev:...``).
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn swh_link(&self, node: usize) -> PyResult<String> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         Ok(format!(
             "https://archive.softwareheritage.org/{}",
             self.graph.properties().swhid(node)
@@ -598,10 +643,11 @@ impl FilteredSwhGraph {
 
     /// Return the commit/tag message, or ``None`` if not available.
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn message(&self, node: usize) -> PyResult<Option<String>> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         Ok(self
             .graph
             .properties()
@@ -611,10 +657,11 @@ impl FilteredSwhGraph {
 
     /// Return the tag name, or ``None`` if not a release or not available.
     ///
-    /// Raises ``IndexError`` if *node* is out of range.
+    /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
+    /// if the node does not match the constraint.
     #[pyo3(text_signature = "(node)")]
     pub fn tag_name(&self, node: usize) -> PyResult<Option<String>> {
-        check_node(node, self.graph.num_nodes())?;
+        self.check_node(node)?;
         Ok(self
             .graph
             .properties()
@@ -622,15 +669,16 @@ impl FilteredSwhGraph {
             .map(|m| String::from_utf8_lossy(&m).to_string()))
     }
 
-    /// Return the ``k`` nodes with the highest filtered outdegree as a list
-    /// of ``(node, outdegree)`` pairs sorted by decreasing degree.
+    /// Return the ``k`` nodes with the highest filtered outdegree as a numpy
+    /// ``uint64`` array of shape ``(k, 2)`` where column 0 holds node IDs
+    /// and column 1 holds outdegrees, sorted by decreasing degree.
     ///
     /// Only nodes matching the constraint are considered.
     #[pyo3(text_signature = "(k)")]
-    pub fn top_k_out(&self, py: Python<'_>, k: usize) -> Vec<(usize, u32)> {
+    pub fn top_k_out<'py>(&self, py: Python<'py>, k: usize) -> Bound<'py, numpy::PyArray2<u64>> {
         let graph = &*self.graph;
         let constraint = self.constraint;
-        py.detach(|| {
+        let result = py.detach(|| {
             top_k(graph.num_nodes(), k, |n| {
                 if !constraint.matches(graph.properties().node_type(n)) {
                     return 0;
@@ -640,18 +688,20 @@ impl FilteredSwhGraph {
                     .filter(|&s| constraint.matches(graph.properties().node_type(s)))
                     .count() as u32
             })
-        })
+        });
+        top_k_to_ndarray(py, result)
     }
 
-    /// Return the ``k`` nodes with the highest filtered indegree as a list
-    /// of ``(node, indegree)`` pairs sorted by decreasing degree.
+    /// Return the ``k`` nodes with the highest filtered indegree as a numpy
+    /// ``uint64`` array of shape ``(k, 2)`` where column 0 holds node IDs
+    /// and column 1 holds indegrees, sorted by decreasing degree.
     ///
     /// Only nodes matching the constraint are considered.
     #[pyo3(text_signature = "(k)")]
-    pub fn top_k_in(&self, py: Python<'_>, k: usize) -> Vec<(usize, u32)> {
+    pub fn top_k_in<'py>(&self, py: Python<'py>, k: usize) -> Bound<'py, numpy::PyArray2<u64>> {
         let graph = &*self.graph;
         let constraint = self.constraint;
-        py.detach(|| {
+        let result = py.detach(|| {
             top_k(graph.num_nodes(), k, |n| {
                 if !constraint.matches(graph.properties().node_type(n)) {
                     return 0;
@@ -661,7 +711,8 @@ impl FilteredSwhGraph {
                     .filter(|&s| constraint.matches(graph.properties().node_type(s)))
                     .count() as u32
             })
-        })
+        });
+        top_k_to_ndarray(py, result)
     }
 
     /// Return whether the given node matches the node-type constraint.

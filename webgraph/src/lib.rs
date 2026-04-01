@@ -7,7 +7,7 @@ use std::rc::Rc;
 use sux::bits::BitVec;
 use sux::traits::{BitVecOps, BitVecOpsMut};
 use webgraph::prelude::*;
-use webgraph_common::{PySuccessorsIterator, check_node, top_k};
+use webgraph_py_common::{PySuccessorsIterator, check_node, top_k, top_k_to_ndarray};
 
 type LoadedBvGraph = webgraph::graphs::bvgraph::BvGraph<
     DynCodesDecoderFactory<BE, MmapHelper<u32>, webgraph::graphs::bvgraph::EF>,
@@ -90,18 +90,21 @@ impl BvGraph {
         let degrees = py.detach(|| {
             (0..graph.num_nodes())
                 .into_par_iter()
+                .with_min_len(1000)
                 .map(|n| graph.outdegree(n) as u32)
                 .collect::<Vec<u32>>()
         });
         PyArray1::from_vec(py, degrees)
     }
 
-    /// Return the ``k`` nodes with the highest outdegree as a list of
-    /// ``(node, outdegree)`` pairs sorted by decreasing degree.
+    /// Return the ``k`` nodes with the highest outdegree as a numpy
+    /// ``uint64`` array of shape ``(k, 2)`` where column 0 holds node IDs
+    /// and column 1 holds outdegrees, sorted by decreasing degree.
     #[pyo3(text_signature = "(k)")]
-    pub fn top_k_out(&self, py: Python<'_>, k: usize) -> Vec<(usize, u32)> {
+    pub fn top_k_out<'py>(&self, py: Python<'py>, k: usize) -> Bound<'py, numpy::PyArray2<u64>> {
         let graph = &*self.graph;
-        py.detach(|| top_k(graph.num_nodes(), k, |n| graph.outdegree(n) as u32))
+        let result = py.detach(|| top_k(graph.num_nodes(), k, |n| graph.outdegree(n) as u32));
+        top_k_to_ndarray(py, result)
     }
 
     /// BFS over all connected components.

@@ -20,4 +20,4 @@ rayon = { workspace = true }
 sux = { workspace = true }
 swh-graph = "11.0.0"
 epserde = "0.12.1"
-webgraph-common = { path = "../webgraph-common" }
+webgraph-py-common = { path = "../webgraph-py-common" }

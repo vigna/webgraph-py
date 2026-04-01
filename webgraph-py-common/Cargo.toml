@@ -1,6 +1,6 @@
 [package]
-name = "webgraph-common"
-version = "0.1.0"
+name = "webgraph-py-common"
+version = "0.1.2"
 edition = "2024"
 authors = [
 	"Dario Moschetti <dariomos.dm@gmail.com>",
@@ -12,5 +12,6 @@ repository = "https://github.com/vigna/webgraph-py"
 
 [dependencies]
 pyo3 = { workspace = true }
+numpy = { workspace = true }
 rayon = { workspace = true }
 dary_heap = { workspace = true }

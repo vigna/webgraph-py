@@ -54,7 +54,7 @@ class BvGraph:
 
     def top_k_out(self, k: int) -> list[tuple[int, int]]:
         """Return the ``k`` nodes with the highest outdegree as a list of
-        ``(node, outdegree)`` pairs sorted by decreasing degree.
+        (*node*, *outdegree*) pairs sorted by decreasing degree.
         """
         ...
 

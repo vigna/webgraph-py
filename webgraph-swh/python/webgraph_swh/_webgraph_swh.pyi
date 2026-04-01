@@ -31,7 +31,7 @@ class SwhGraph:
 
     Loads the graph and all available properties (maps, persons, strings,
     timestamps) from the given base path. Node IDs are integers in
-    ``[0, num_nodes)``.
+    [0 . . `num_nodes`).
     """
 
     def __init__(self, path: str) -> None:
@@ -115,13 +115,13 @@ class SwhGraph:
 
     def top_k_out(self, k: int) -> list[tuple[int, int]]:
         """Return the ``k`` nodes with the highest outdegree as a list of
-        ``(node, outdegree)`` pairs sorted by decreasing degree.
+        (*node*, *outdegree*) pairs sorted by decreasing degree.
         """
         ...
 
     def top_k_in(self, k: int) -> list[tuple[int, int]]:
         """Return the ``k`` nodes with the highest indegree as a list of
-        ``(node, indegree)`` pairs sorted by decreasing degree.
+        (*node*, *indegree*) pairs sorted by decreasing degree.
         """
         ...
 
@@ -229,13 +229,13 @@ class FilteredSwhGraph:
 
     def top_k_out(self, k: int) -> list[tuple[int, int]]:
         """Return the ``k`` nodes with the highest filtered outdegree as a list
-        of ``(node, outdegree)`` pairs sorted by decreasing degree.
+        of (*node*, *outdegree*) pairs sorted by decreasing degree.
         """
         ...
 
     def top_k_in(self, k: int) -> list[tuple[int, int]]:
         """Return the ``k`` nodes with the highest filtered indegree as a list
-        of ``(node, indegree)`` pairs sorted by decreasing degree.
+        of (*node*, *indegree*) pairs sorted by decreasing degree.
         """
         ...
 

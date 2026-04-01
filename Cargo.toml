@@ -1,5 +1,5 @@
 [workspace]
-members = ["webgraph", "webgraph-swh", "webgraph-common"]
+members = ["webgraph", "webgraph-swh", "webgraph-py-common"]
 resolver = "3"
 
 [workspace.dependencies]

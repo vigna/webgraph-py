@@ -11,8 +11,8 @@ readme = "README.md"
 license = "Apache-2.0 OR LGPL-2.1-or-later"
 keywords = ["graph", "software-heritage", "swh", "webgraph", "knowledge-graph"]
 authors = [
-    { name = "Dario Moschetti", email = "dariomos.dm@gmail.com" },
     { name = "Sebastiano Vigna", email = "sebastiano.vigna@unimi.it" },
+    { name = "Dario Moschetti", email = "dariomos.dm@gmail.com" },
 ]
 classifiers = [
     "Intended Audience :: Science/Research",

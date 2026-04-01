@@ -20,4 +20,4 @@ rayon = { workspace = true }
 dsi-bitstream = { workspace = true }
 sux = { workspace = true }
 webgraph = { workspace = true }
-webgraph-common = { path = "../webgraph-common" }
+webgraph-py-common = { path = "../webgraph-py-common" }

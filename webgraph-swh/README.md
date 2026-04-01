@@ -7,6 +7,14 @@ Heritage](https://www.softwareheritage.org/) graphs, built on top of
 Provides bidirectional graph traversal with full access to node properties
 (SWHIDs, timestamps, persons, messages) for the SWH compressed graph.
 
+## Installation
+
+```bash
+pip install webgraph-swh
+```
+
+This automatically installs the `webgraph` package as a dependency.
+
 ## Building from source
 
 Pre-built wheels are compiled for a generic target. You should however enable
@@ -22,15 +30,8 @@ pip install dist/*.whl
 ```
 
 The repository's `.cargo/config.toml` sets `target-cpu=native`, so the
-resulting wheel will be optimized for your CPU.
-
-## Installation
-
-```bash
-pip install webgraph-swh
-```
-
-This automatically installs the `webgraph` package as a dependency.
+resulting wheel will be optimized for your CPU. We suggest to use the
+same approach for [`webgraph`](https://pypi.org/project/webgraph/).
 
 ## Quick start
 
