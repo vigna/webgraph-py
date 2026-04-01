@@ -28,6 +28,7 @@ classifiers = [
 dependencies = ["numpy"]
 
 [project.urls]
+Documentation = "https://vigna.github.io/webgraph-py/webgraph.html"
 Repository = "https://github.com/vigna/webgraph-py"
 "Bug Tracker" = "https://github.com/vigna/webgraph-py/issues"
 Changelog = "https://github.com/vigna/webgraph-py/releases"
