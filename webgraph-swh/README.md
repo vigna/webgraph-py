@@ -1,10 +1,17 @@
 # webgraph-swh
 
+Python bindings for accessing [Software
+Heritage](https://www.softwareheritage.org/) graphs, built on top of
+[webgraph](https://pypi.org/project/webgraph/).
+
+Provides bidirectional graph traversal with full access to node properties
+(SWHIDs, timestamps, persons, messages) for the SWH compressed graph.
+
 ## Building from source
 
-Pre-built wheels are compiled for a generic x86-64 target. If you need
+Pre-built wheels are compiled for a generic target. You should enable
 native optimizations (e.g., BMI2 for faster succinct data structures),
-you can build the wheel from source:
+by building the wheel from source:
 
 ```bash
 pip install maturin
@@ -16,13 +23,6 @@ pip install dist/*.whl
 
 The repository's `.cargo/config.toml` sets `target-cpu=native`, so the
 resulting wheel will be optimized for your CPU.
-
-Python bindings for accessing [Software
-Heritage](https://www.softwareheritage.org/) graphs, built on top of
-[webgraph](https://pypi.org/project/webgraph/).
-
-Provides bidirectional graph traversal with full access to node properties
-(SWHIDs, timestamps, persons, messages) for the SWH compressed graph.
 
 ## Installation
 
