@@ -11,10 +11,9 @@ permissions:
   contents: read
 
 env:
-  # Override .cargo/config.toml target-cpu=native for CI builds.
-  # x86-64-v3 (Haswell 2013+, Zen 2 2019+): enables BMI2, AVX2, FMA.
-  # aarch64 ignores this flag and uses its own baseline.
-  CARGO_BUILD_RUSTFLAGS: "-C target-cpu=x86-64-v3"
+  # RUSTFLAGS (not CARGO_BUILD_RUSTFLAGS) fully suppresses config.toml
+  # build.rustflags, which sets target-cpu=native for local builds.
+  RUSTFLAGS: ""
 
 jobs:
   linux:
