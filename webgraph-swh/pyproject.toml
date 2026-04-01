@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "webgraph-swh"
-version = "0.1.2"
+version = "0.1.1"
 requires-python = ">=3.10"
 description = "Python bindings for Software Heritage graph access (built on webgraph)"
 readme = "README.md"
