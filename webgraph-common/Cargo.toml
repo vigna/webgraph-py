@@ -2,8 +2,13 @@
 name = "webgraph-common"
 version = "0.1.0"
 edition = "2024"
+authors = [
+	"Dario Moschetti <dariomos.dm@gmail.com>",
+	"Sebastiano Vigna <sebastiano.vigna@unimi.it>",
+]
 license = "Apache-2.0 OR LGPL-2.1-or-later"
 publish = false
+repository = "https://github.com/vigna/webgraph-py"
 
 [dependencies]
 pyo3 = { workspace = true }
