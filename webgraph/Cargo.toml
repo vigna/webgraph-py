@@ -11,7 +11,7 @@ repository = "https://github.com/vigna/webgraph-py"
 
 [lib]
 name = "_webgraph"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]
 
 [dependencies]
 pyo3 = { workspace = true }

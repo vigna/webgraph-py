@@ -17,7 +17,7 @@ crate-type = ["cdylib"]
 pyo3 = { workspace = true }
 numpy = { workspace = true }
 rayon = { workspace = true }
-dary_heap = { workspace = true }
 sux = { workspace = true }
 swh-graph = "11.0.0"
 epserde = "0.12.1"
+webgraph-py = { path = "../webgraph" }

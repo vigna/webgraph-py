@@ -1,9 +1,8 @@
-use dary_heap::QuaternaryHeap;
+use _webgraph::{PySuccessorsIterator, check_node, top_k};
 use epserde::deser::{DeserInner, ReaderWithPos, check_header};
 use numpy::PyArray1;
 use pyo3::prelude::*;
 use rayon::prelude::*;
-use std::cmp::Reverse;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -30,73 +29,6 @@ type MyProperties = SwhGraphProperties<
 
 type NamesMap = partial_array::PartialArray<Box<str>, partial_array::SparseIndex<Box<[usize]>>>;
 type SparseEf = EliasFano<SelectZeroAdaptConst<BitVec<Box<[usize]>>, Box<[usize]>, 12, 3>>;
-
-/// Return the `k` nodes with the highest degree, computed in parallel.
-fn top_k(num_nodes: usize, k: usize, degree_fn: impl Fn(usize) -> u32 + Sync) -> Vec<(usize, u32)> {
-    if k == 0 {
-        return Vec::new();
-    }
-    let mut result: Vec<(usize, u32)> = (0..num_nodes)
-        .into_par_iter()
-        .fold(
-            QuaternaryHeap::<Reverse<(u32, usize)>>::new,
-            |mut heap, n| {
-                let deg = degree_fn(n);
-                if deg > 0 {
-                    if heap.len() < k {
-                        heap.push(Reverse((deg, n)));
-                    } else {
-                        let mut top = heap.peek_mut().unwrap();
-                        if deg > top.0.0 {
-                            *top = Reverse((deg, n));
-                        }
-                    }
-                }
-                heap
-            },
-        )
-        .reduce(
-            QuaternaryHeap::new,
-            |mut a, b| {
-                for Reverse((deg, n)) in b {
-                    if a.len() < k {
-                        a.push(Reverse((deg, n)));
-                    } else {
-                        let mut top = a.peek_mut().unwrap();
-                        if deg > top.0.0 {
-                            *top = Reverse((deg, n));
-                        }
-                    }
-                }
-                a
-            },
-        )
-        .into_iter()
-        .map(|Reverse((deg, n))| (n, deg))
-        .collect();
-    result.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    result
-}
-
-/// Iterator over node IDs (successors or predecessors).
-#[pyclass(unsendable)]
-pub struct PySuccessorsIterator {
-    // SAFETY: `iter` borrows from the graph held by `_keepalive`.
-    // `iter` is declared before `_keepalive` so it is dropped first.
-    iter: Box<dyn Iterator<Item = usize>>,
-    _keepalive: Rc<dyn std::any::Any>,
-}
-
-#[pymethods]
-impl PySuccessorsIterator {
-    fn __iter__(slf: PyRef<Self>) -> PyRef<Self> {
-        slf
-    }
-
-    fn __next__(&mut self) -> Option<usize> {
-        self.iter.next()
-    }
-}
 
 /// A bidirectional Software Heritage graph with node properties.
 ///
@@ -191,6 +123,8 @@ impl From<NodeType> for PyNodeType {
 pub struct FilteredSwhGraph {
     graph: Rc<SwhBidirectionalGraph<MyProperties>>,
     constraint: NodeConstraint,
+    basepath: String,
+    constraint_str: String,
 }
 
 #[pymethods]
@@ -229,105 +163,146 @@ impl SwhGraph {
     }
 
     /// Return the number of successors of the given node.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn outdegree(&self, node: usize) -> usize {
-        self.graph.outdegree(node)
+    pub fn outdegree(&self, node: usize) -> PyResult<usize> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.outdegree(node))
     }
 
     /// Return the number of predecessors of the given node.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn indegree(&self, node: usize) -> usize {
-        self.graph.indegree(node)
+    pub fn indegree(&self, node: usize) -> PyResult<usize> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.indegree(node))
     }
 
     /// Return an iterator over the predecessors of the given node.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn predecessors(&self, node: usize) -> PySuccessorsIterator {
+    pub fn predecessors(&self, node: usize) -> PyResult<PySuccessorsIterator> {
+        check_node(node, self.graph.num_nodes())?;
         let graph = self.graph.clone();
         // SAFETY: same as BvGraph::successors — Rc keeps graph alive,
         // `iter` is dropped before `_keepalive`.
         let graph_ref: &'static SwhBidirectionalGraph<MyProperties> =
             unsafe { &*Rc::as_ptr(&graph) };
-        PySuccessorsIterator {
-            iter: Box::new(graph_ref.predecessors(node)),
-            _keepalive: graph,
-        }
+        Ok(PySuccessorsIterator::new(
+            Box::new(graph_ref.predecessors(node)),
+            graph,
+        ))
     }
 
     /// Return an iterator over the successors of the given node.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn successors(&self, node: usize) -> PySuccessorsIterator {
+    pub fn successors(&self, node: usize) -> PyResult<PySuccessorsIterator> {
+        check_node(node, self.graph.num_nodes())?;
         let graph = self.graph.clone();
         let graph_ref: &'static SwhBidirectionalGraph<MyProperties> =
             unsafe { &*Rc::as_ptr(&graph) };
-        PySuccessorsIterator {
-            iter: Box::new(graph_ref.successors(node)),
-            _keepalive: graph,
-        }
+        Ok(PySuccessorsIterator::new(
+            Box::new(graph_ref.successors(node)),
+            graph,
+        ))
     }
 
     /// Return the committer person ID, or ``None`` if not available.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn committer_id(&self, node: usize) -> Option<u32> {
-        self.graph.properties().committer_id(node)
+    pub fn committer_id(&self, node: usize) -> PyResult<Option<u32>> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.properties().committer_id(node))
     }
 
     /// Return the author person ID, or ``None`` if not available.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn author_id(&self, node: usize) -> Option<u32> {
-        self.graph.properties().author_id(node)
+    pub fn author_id(&self, node: usize) -> PyResult<Option<u32>> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.properties().author_id(node))
     }
 
     /// Return the node type as a ``PyNodeType`` enum value.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn node_type(&self, node: usize) -> PyNodeType {
-        self.graph.properties().node_type(node).into()
+    pub fn node_type(&self, node: usize) -> PyResult<PyNodeType> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.properties().node_type(node).into())
     }
 
     /// Return the committer timestamp (seconds since epoch), or ``None``.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn committer_timestamp(&self, node: usize) -> Option<i64> {
-        self.graph.properties().committer_timestamp(node)
+    pub fn committer_timestamp(&self, node: usize) -> PyResult<Option<i64>> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.properties().committer_timestamp(node))
     }
 
     /// Return the author timestamp (seconds since epoch), or ``None``.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn author_timestamp(&self, node: usize) -> Option<i64> {
-        self.graph.properties().author_timestamp(node)
+    pub fn author_timestamp(&self, node: usize) -> PyResult<Option<i64>> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.properties().author_timestamp(node))
     }
 
     /// Return the SWHID of the given node as a string.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn swhid(&self, node: usize) -> String {
-        self.graph.properties().swhid(node).to_string()
+    pub fn swhid(&self, node: usize) -> PyResult<String> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.properties().swhid(node).to_string())
     }
 
     /// Return the URL of the Software Heritage archive page for the given
     /// node (e.g., ``https://archive.softwareheritage.org/swh:1:rev:...``).
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn swh_link(&self, node: usize) -> String {
-        format!(
+    pub fn swh_link(&self, node: usize) -> PyResult<String> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(format!(
             "https://archive.softwareheritage.org/{}",
             self.graph.properties().swhid(node)
-        )
+        ))
     }
 
     /// Return the commit/tag message, or ``None`` if not available.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn message(&self, node: usize) -> Option<String> {
-        self.graph
+    pub fn message(&self, node: usize) -> PyResult<Option<String>> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self
+            .graph
             .properties()
             .message(node)
-            .map(|m| String::from_utf8_lossy(&m).to_string())
+            .map(|m| String::from_utf8_lossy(&m).to_string()))
     }
 
     /// Return the tag name, or ``None`` if not a release or not available.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn tag_name(&self, node: usize) -> Option<String> {
-        self.graph
+    pub fn tag_name(&self, node: usize) -> PyResult<Option<String>> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self
+            .graph
             .properties()
             .tag_name(node)
-            .map(|m| String::from_utf8_lossy(&m).to_string())
+            .map(|m| String::from_utf8_lossy(&m).to_string()))
     }
 
     /// Return a numpy ``uint32`` array of outdegrees for all nodes, computed
@@ -391,6 +366,8 @@ impl SwhGraph {
         Ok(FilteredSwhGraph {
             graph: self.graph.clone(),
             constraint,
+            basepath: self.basepath.clone(),
+            constraint_str: node_types.to_string(),
         })
     }
 
@@ -413,6 +390,14 @@ impl SwhGraph {
         let bvgraph_cls = webgraph_mod.getattr("BvGraph")?;
         bvgraph_cls.call1((format!("{}-transposed", self.basepath),))
     }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "SwhGraph(basepath={:?}, num_nodes={})",
+            self.basepath,
+            self.graph.num_nodes()
+        )
+    }
 }
 
 #[pymethods]
@@ -424,58 +409,72 @@ impl FilteredSwhGraph {
     }
 
     /// Return the number of successors matching the node-type constraint.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn outdegree(&self, node: usize) -> usize {
-        self.graph
+    pub fn outdegree(&self, node: usize) -> PyResult<usize> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self
+            .graph
             .successors(node)
             .filter(|&n| self.constraint.matches(self.graph.properties().node_type(n)))
-            .count()
+            .count())
     }
 
     /// Return the number of predecessors matching the node-type constraint.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn indegree(&self, node: usize) -> usize {
-        self.graph
+    pub fn indegree(&self, node: usize) -> PyResult<usize> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self
+            .graph
             .predecessors(node)
             .filter(|&n| self.constraint.matches(self.graph.properties().node_type(n)))
-            .count()
+            .count())
     }
 
     /// Return an iterator over successors matching the node-type constraint.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn successors(&self, node: usize) -> PySuccessorsIterator {
+    pub fn successors(&self, node: usize) -> PyResult<PySuccessorsIterator> {
+        check_node(node, self.graph.num_nodes())?;
         let graph = self.graph.clone();
         let constraint = self.constraint;
         // SAFETY: same as SwhGraph::successors — Rc keeps graph alive,
         // `iter` is dropped before `_keepalive`.
         let graph_ref: &'static SwhBidirectionalGraph<MyProperties> =
             unsafe { &*Rc::as_ptr(&graph) };
-        PySuccessorsIterator {
-            iter: Box::new(
+        Ok(PySuccessorsIterator::new(
+            Box::new(
                 graph_ref
                     .successors(node)
                     .filter(move |&n| constraint.matches(graph_ref.properties().node_type(n))),
             ),
-            _keepalive: graph,
-        }
+            graph,
+        ))
     }
 
     /// Return an iterator over predecessors matching the node-type constraint.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn predecessors(&self, node: usize) -> PySuccessorsIterator {
+    pub fn predecessors(&self, node: usize) -> PyResult<PySuccessorsIterator> {
+        check_node(node, self.graph.num_nodes())?;
         let graph = self.graph.clone();
         let constraint = self.constraint;
         // SAFETY: same as SwhGraph::predecessors.
         let graph_ref: &'static SwhBidirectionalGraph<MyProperties> =
             unsafe { &*Rc::as_ptr(&graph) };
-        PySuccessorsIterator {
-            iter: Box::new(
+        Ok(PySuccessorsIterator::new(
+            Box::new(
                 graph_ref
                     .predecessors(node)
                     .filter(move |&n| constraint.matches(graph_ref.properties().node_type(n))),
             ),
-            _keepalive: graph,
-        }
+            graph,
+        ))
     }
 
     /// Return a numpy array of filtered outdegrees for all nodes, computed in
@@ -531,67 +530,96 @@ impl FilteredSwhGraph {
     }
 
     /// Return the committer person ID, or ``None`` if not available.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn committer_id(&self, node: usize) -> Option<u32> {
-        self.graph.properties().committer_id(node)
+    pub fn committer_id(&self, node: usize) -> PyResult<Option<u32>> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.properties().committer_id(node))
     }
 
     /// Return the author person ID, or ``None`` if not available.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn author_id(&self, node: usize) -> Option<u32> {
-        self.graph.properties().author_id(node)
+    pub fn author_id(&self, node: usize) -> PyResult<Option<u32>> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.properties().author_id(node))
     }
 
     /// Return the node type as a ``PyNodeType`` enum value.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn node_type(&self, node: usize) -> PyNodeType {
-        self.graph.properties().node_type(node).into()
+    pub fn node_type(&self, node: usize) -> PyResult<PyNodeType> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.properties().node_type(node).into())
     }
 
     /// Return the committer timestamp (seconds since epoch), or ``None``.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn committer_timestamp(&self, node: usize) -> Option<i64> {
-        self.graph.properties().committer_timestamp(node)
+    pub fn committer_timestamp(&self, node: usize) -> PyResult<Option<i64>> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.properties().committer_timestamp(node))
     }
 
     /// Return the author timestamp (seconds since epoch), or ``None``.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn author_timestamp(&self, node: usize) -> Option<i64> {
-        self.graph.properties().author_timestamp(node)
+    pub fn author_timestamp(&self, node: usize) -> PyResult<Option<i64>> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.properties().author_timestamp(node))
     }
 
     /// Return the SWHID of the given node as a string.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn swhid(&self, node: usize) -> String {
-        self.graph.properties().swhid(node).to_string()
+    pub fn swhid(&self, node: usize) -> PyResult<String> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.properties().swhid(node).to_string())
     }
 
     /// Return the URL of the Software Heritage archive page for the given
     /// node (e.g., ``https://archive.softwareheritage.org/swh:1:rev:...``).
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn swh_link(&self, node: usize) -> String {
-        format!(
+    pub fn swh_link(&self, node: usize) -> PyResult<String> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(format!(
             "https://archive.softwareheritage.org/{}",
             self.graph.properties().swhid(node)
-        )
+        ))
     }
 
     /// Return the commit/tag message, or ``None`` if not available.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn message(&self, node: usize) -> Option<String> {
-        self.graph
+    pub fn message(&self, node: usize) -> PyResult<Option<String>> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self
+            .graph
             .properties()
             .message(node)
-            .map(|m| String::from_utf8_lossy(&m).to_string())
+            .map(|m| String::from_utf8_lossy(&m).to_string()))
     }
 
     /// Return the tag name, or ``None`` if not a release or not available.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn tag_name(&self, node: usize) -> Option<String> {
-        self.graph
+    pub fn tag_name(&self, node: usize) -> PyResult<Option<String>> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self
+            .graph
             .properties()
             .tag_name(node)
-            .map(|m| String::from_utf8_lossy(&m).to_string())
+            .map(|m| String::from_utf8_lossy(&m).to_string()))
     }
 
     /// Return the ``k`` nodes with the highest filtered outdegree as a list
@@ -643,6 +671,15 @@ impl FilteredSwhGraph {
             && self
                 .constraint
                 .matches(self.graph.properties().node_type(node))
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "FilteredSwhGraph(basepath={:?}, constraint={:?}, num_nodes={})",
+            self.basepath,
+            self.constraint_str,
+            self.graph.num_nodes()
+        )
     }
 }
 

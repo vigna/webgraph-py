@@ -19,7 +19,7 @@ type LoadedBvGraph = webgraph::graphs::bvgraph::BvGraph<
 /// Each rayon task maintains a local quaternary min-heap of size `k`;
 /// the heaps are then merged into a single top-`k` result sorted by
 /// degree descending (ties broken by ascending node ID).
-fn top_k(num_nodes: usize, k: usize, degree_fn: impl Fn(usize) -> u32 + Sync) -> Vec<(usize, u32)> {
+pub fn top_k(num_nodes: usize, k: usize, degree_fn: impl Fn(usize) -> u32 + Sync) -> Vec<(usize, u32)> {
     if k == 0 {
         return Vec::new();
     }
@@ -65,13 +65,43 @@ fn top_k(num_nodes: usize, k: usize, degree_fn: impl Fn(usize) -> u32 + Sync) ->
     result
 }
 
+/// Check that `node` is in `[0, num_nodes)`, raising `IndexError` if not.
+pub fn check_node(node: usize, num_nodes: usize) -> PyResult<()> {
+    if node >= num_nodes {
+        Err(pyo3::exceptions::PyIndexError::new_err(format!(
+            "node index {} out of range for graph with {} nodes",
+            node, num_nodes
+        )))
+    } else {
+        Ok(())
+    }
+}
+
 /// Iterator over node IDs (successors or predecessors).
+///
+/// # Safety
+///
+/// `iter` **must** be declared before `_keepalive` so that it is dropped
+/// first. The iterator borrows from the graph held by the `Rc` in
+/// `_keepalive`; reordering the fields would cause use-after-free.
 #[pyclass(unsendable)]
 pub struct PySuccessorsIterator {
-    // SAFETY: `iter` borrows from the graph held by `_keepalive`.
-    // `iter` is declared before `_keepalive` so it is dropped first.
+    // INVARIANT: `iter` MUST be declared before `_keepalive` (drop order).
     iter: Box<dyn Iterator<Item = usize>>,
     _keepalive: Rc<dyn std::any::Any>,
+}
+
+impl PySuccessorsIterator {
+    /// Create a new iterator.
+    ///
+    /// The caller must ensure that `iter` borrows only from data kept
+    /// alive by `keepalive`.
+    pub fn new(iter: Box<dyn Iterator<Item = usize>>, keepalive: Rc<dyn std::any::Any>) -> Self {
+        Self {
+            iter,
+            _keepalive: keepalive,
+        }
+    }
 }
 
 #[pymethods]
@@ -88,6 +118,7 @@ impl PySuccessorsIterator {
 /// A compressed graph in WebGraph format.
 ///
 /// Provides forward-only access (successors) and BFS traversal.
+/// For backward (predecessor) access, load the transposed graph.
 ///
 /// Example::
 ///
@@ -97,6 +128,7 @@ impl PySuccessorsIterator {
 #[pyclass(unsendable)]
 pub struct BvGraph {
     graph: Rc<LoadedBvGraph>,
+    basename: String,
 }
 
 #[pymethods]
@@ -110,6 +142,7 @@ impl BvGraph {
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         Ok(Self {
             graph: Rc::new(graph),
+            basename,
         })
     }
 
@@ -126,23 +159,29 @@ impl BvGraph {
     }
 
     /// Return the number of successors of the given node.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn outdegree(&self, node: usize) -> usize {
-        self.graph.outdegree(node)
+    pub fn outdegree(&self, node: usize) -> PyResult<usize> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(self.graph.outdegree(node))
     }
 
     /// Return an iterator over the successors of the given node.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn successors(&self, node: usize) -> PySuccessorsIterator {
+    pub fn successors(&self, node: usize) -> PyResult<PySuccessorsIterator> {
+        check_node(node, self.graph.num_nodes())?;
         let graph = self.graph.clone();
         // SAFETY: The Rc in PySuccessorsIterator keeps the graph alive
         // for as long as the iterator exists. The `iter` field is dropped
         // before `_keepalive` due to declaration order.
         let graph_ref: &'static LoadedBvGraph = unsafe { &*Rc::as_ptr(&graph) };
-        PySuccessorsIterator {
-            iter: Box::new(graph_ref.successors(node)),
-            _keepalive: graph,
-        }
+        Ok(PySuccessorsIterator::new(
+            Box::new(graph_ref.successors(node)),
+            graph,
+        ))
     }
 
     /// Return a numpy ``uint32`` array of outdegrees for all nodes, computed
@@ -169,7 +208,10 @@ impl BvGraph {
 
     /// BFS over all connected components.
     ///
-    /// Yields ``(root, parent, node, distance)`` tuples.
+    /// Yields ``(root, parent, node, distance)`` tuples where *root*
+    /// identifies the BFS tree (starting node of the component),
+    /// *parent* is the node from which *node* was discovered (equal to
+    /// *node* for roots), and *distance* is the hop count from *root*.
     #[pyo3(text_signature = "()")]
     pub fn bfs(&self) -> PyBfsIterator {
         PyBfsIterator::new(self.graph.clone(), false, 0)
@@ -177,18 +219,34 @@ impl BvGraph {
 
     /// BFS from a single starting node.
     ///
-    /// Yields ``(root, parent, node, distance)`` tuples.
+    /// Yields ``(root, parent, node, distance)`` tuples where *root*
+    /// is always the starting node, *parent* is the node from which
+    /// *node* was discovered (equal to *node* for the root), and
+    /// *distance* is the hop count from the starting node.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
     #[pyo3(text_signature = "(node)")]
-    pub fn bfs_from_node(&self, node: usize) -> PyBfsIterator {
-        PyBfsIterator::new(self.graph.clone(), true, node)
+    pub fn bfs_from_node(&self, node: usize) -> PyResult<PyBfsIterator> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(PyBfsIterator::new(self.graph.clone(), true, node))
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "BvGraph(basename={:?}, num_nodes={}, num_arcs={})",
+            self.basename,
+            self.graph.num_nodes(),
+            self.graph.num_arcs()
+        )
     }
 }
 
 /// Iterator for breadth-first traversal.
 ///
-/// Yields ``(root, parent, node, distance)`` tuples. When traversing
-/// all components, ``root`` identifies which component the node
-/// belongs to.
+/// Yields ``(root, parent, node, distance)`` tuples where *root*
+/// identifies the BFS tree, *parent* is the node from which *node*
+/// was discovered (equal to *node* for roots), and *distance* is the
+/// hop count from *root*.
 #[pyclass(unsendable)]
 pub struct PyBfsIterator {
     graph: Rc<LoadedBvGraph>,

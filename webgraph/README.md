@@ -45,7 +45,7 @@ print(f"Nodes: {g.num_nodes()}, Arcs: {g.num_arcs()}")
 for s in g.successors(42):
     print(s)
 
-# Dgree computation (returns a numpy array)
+# Degree computation (returns a numpy array)
 degrees = g.outdegrees()
 
 # Top-k nodes by degree (parallel computation)
