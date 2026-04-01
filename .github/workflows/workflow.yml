@@ -32,7 +32,7 @@ jobs:
           manylinux: auto
           sccache: true
           before-script-linux: |
-            dnf install -y clang-devel || yum install -y clang-devel || true
+            dnf install -y gcc-c++ clang clang-devel || yum install -y gcc-c++ clang clang-devel || true
       - uses: actions/upload-artifact@v4
         with:
           name: wheels_${{ matrix.package }}_linux-${{ matrix.target }}
@@ -75,7 +75,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [webgraph, webgraph-swh]
+        # webgraph-swh excluded: pthash (swh-graph dep) requires POSIX headers
+        package: [webgraph]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
