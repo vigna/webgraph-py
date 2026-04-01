@@ -4,11 +4,35 @@ build-backend = "maturin"
 
 [project]
 name = "webgraph-swh"
-version = "0.1.0"
+version = "0.1.2"
 requires-python = ">=3.10"
 description = "Python bindings for Software Heritage graph access (built on webgraph)"
+readme = "README.md"
+license = "Apache-2.0 OR LGPL-2.1-or-later"
+keywords = ["graph", "software-heritage", "swh", "webgraph", "knowledge-graph"]
+authors = [
+    { name = "Dario Moschetti", email = "dariomos.dm@gmail.com" },
+    { name = "Sebastiano Vigna", email = "sebastiano.vigna@unimi.it" },
+]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
 dependencies = ["numpy", "webgraph"]
+
+[project.urls]
+Repository = "https://github.com/vigna/webgraph-py"
+"Bug Tracker" = "https://github.com/vigna/webgraph-py/issues"
+Changelog = "https://github.com/vigna/webgraph-py/releases"
 
 [tool.maturin]
 python-source = "python"
 module-name = "webgraph_swh._webgraph_swh"
+strip = true

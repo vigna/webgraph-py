@@ -12,7 +12,7 @@ permissions:
 
 env:
   # Override .cargo/config.toml target-cpu=native for portable binaries
-  CARGO_BUILD_RUSTFLAGS: ""
+  CARGO_BUILD_RUSTFLAGS: "-C target-cpu=baseline"
 
 jobs:
   linux:
@@ -122,6 +122,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          skip-existing: true
 
   publish-webgraph-swh:
     needs: [linux, macos, windows, publish-webgraph]
@@ -141,3 +142,4 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          skip-existing: true
