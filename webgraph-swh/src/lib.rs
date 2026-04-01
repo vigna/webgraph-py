@@ -525,7 +525,7 @@ impl FilteredSwhGraph {
         let degrees = py.detach(|| {
             (0..graph.num_nodes())
                 .into_par_iter()
-                .with_min_len(1000)
+                .with_min_len(graph.num_nodes().isqrt())
                 .map(|n| {
                     if !constraint.matches(graph.properties().node_type(n)) {
                         return 0;
@@ -552,7 +552,7 @@ impl FilteredSwhGraph {
         let degrees = py.detach(|| {
             (0..graph.num_nodes())
                 .into_par_iter()
-                .with_min_len(1000)
+                .with_min_len(graph.num_nodes().isqrt())
                 .map(|n| {
                     if !constraint.matches(graph.properties().node_type(n)) {
                         return 0;

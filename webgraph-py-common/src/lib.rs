@@ -20,7 +20,7 @@ pub fn top_k(
     }
     let mut result: Vec<(usize, u32)> = (0..num_nodes)
         .into_par_iter()
-        .with_min_len(1000)
+        .with_min_len(num_nodes.isqrt())
         .fold(
             QuaternaryHeap::<Reverse<(u32, usize)>>::new,
             |mut heap, n| {
