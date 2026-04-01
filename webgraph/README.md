@@ -1,5 +1,22 @@
 # webgraph
 
+## Building from source
+
+Pre-built wheels are compiled for a generic x86-64 target. If you need
+native optimizations (e.g., BMI2 for faster succinct data structures),
+you can build the wheel from source:
+
+```bash
+pip install maturin
+git clone https://github.com/vigna/webgraph-py.git
+cd webgraph-py/webgraph
+maturin build --release -o dist
+pip install dist/*.whl
+```
+
+The repository's `.cargo/config.toml` sets `target-cpu=native`, so the
+resulting wheel will be optimized for your CPU.
+
 Python bindings for the [Rust version](https://crates.io/crates/webgraph) of the
 [WebGraph](https://webgraph.di.unimi.it/) framework, built with
 [PyO3](https://pyo3.rs/).
