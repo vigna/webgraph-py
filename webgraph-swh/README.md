@@ -9,8 +9,8 @@ Provides bidirectional graph traversal with full access to node properties
 
 ## Building from source
 
-Pre-built wheels are compiled for a generic target. You should enable
-native optimizations (e.g., BMI2 for faster succinct data structures),
+Pre-built wheels are compiled for a generic target. You should however enable
+native optimizations (e.g., BMI2 for faster succinct data structures)
 by building the wheel from source:
 
 ```bash
