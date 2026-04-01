@@ -22,6 +22,10 @@ jobs:
       matrix:
         package: [webgraph, webgraph-swh]
         target: [x86_64, aarch64]
+        exclude:
+          # pthash C++ build fails in aarch64 cross-compilation container
+          - package: webgraph-swh
+            target: aarch64
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
