@@ -26,6 +26,17 @@ class PySuccessorsIterator:
     def __iter__(self) -> PySuccessorsIterator: ...
     def __next__(self) -> int: ...
 
+class PyBfsIterator:
+    """Iterator for breadth-first traversal.
+
+    Yields ``(root, parent, node, distance)`` tuples. When traversing
+    all components, ``root`` identifies which component the node
+    belongs to.
+    """
+
+    def __iter__(self) -> PyBfsIterator: ...
+    def __next__(self) -> tuple[int, int, int, int]: ...
+
 class SwhGraph:
     """A bidirectional Software Heritage graph with node properties.
 
@@ -125,6 +136,26 @@ class SwhGraph:
         """
         ...
 
+    def node_type_frequencies(self) -> npt.NDArray[np.uint64]:
+        """Return a numpy ``uint64`` array indexed by ``PyNodeType`` values,
+        with frequencies of each node type.
+        """
+        ...
+
+    def bfs(self) -> PyBfsIterator:
+        """BFS over all connected components.
+
+        Yields ``(root, parent, node, distance)`` tuples.
+        """
+        ...
+
+    def bfs_from_node(self, node: int) -> PyBfsIterator:
+        """BFS from a single starting node.
+
+        Yields ``(root, parent, node, distance)`` tuples.
+        """
+        ...
+
     def subgraph(self, node_types: str) -> FilteredSwhGraph:
         """Return a FilteredSwhGraph restricted to the given node types.
 
@@ -161,6 +192,10 @@ class FilteredSwhGraph:
         """Return the number of nodes in the underlying (unfiltered) graph."""
         ...
 
+    def precise_num_nodes(self) -> int:
+        """Return the number of nodes matching the node-type constraint."""
+        ...
+
     def outdegree(self, node: int) -> int:
         """Return the number of successors matching the node-type constraint."""
         ...
@@ -186,6 +221,12 @@ class FilteredSwhGraph:
     def indegrees(self) -> npt.NDArray[np.uint32]:
         """Return a numpy array of filtered indegrees for all nodes, computed in
         parallel.
+        """
+        ...
+
+    def node_type_frequencies(self) -> npt.NDArray[np.uint64]:
+        """Return a numpy ``uint64`` array indexed by ``PyNodeType`` values,
+        with frequencies of matching nodes for each node type.
         """
         ...
 

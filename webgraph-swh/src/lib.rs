@@ -2,6 +2,7 @@ use epserde::deser::{DeserInner, ReaderWithPos, check_header};
 use numpy::PyArray1;
 use pyo3::prelude::*;
 use rayon::prelude::*;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -10,7 +11,7 @@ use sux::array::partial_array;
 use sux::bits::BitVec;
 use sux::dict::EliasFano;
 use sux::rank_sel::SelectZeroAdaptConst;
-use sux::traits::SuccUnchecked;
+use sux::traits::{BitVecOps, BitVecOpsMut, SuccUnchecked};
 use swh_graph::graph::{
     SwhBackwardGraph, SwhBidirectionalGraph, SwhForwardGraph, SwhGraph as SwhGraphTrait,
     SwhGraphWithProperties,
@@ -31,6 +32,19 @@ type MyProperties = SwhGraphProperties<
 
 type NamesMap = partial_array::PartialArray<Box<str>, partial_array::SparseIndex<Box<[usize]>>>;
 type SparseEf = EliasFano<SelectZeroAdaptConst<BitVec<Box<[usize]>>, Box<[usize]>, 12, 3>>;
+
+const NUM_NODE_TYPES: usize = 6;
+
+fn node_type_index(node_type: NodeType) -> usize {
+    match node_type {
+        NodeType::Content => 0,
+        NodeType::Directory => 1,
+        NodeType::Origin => 2,
+        NodeType::Release => 3,
+        NodeType::Revision => 4,
+        NodeType::Snapshot => 5,
+    }
+}
 
 /// A bidirectional Software Heritage graph with node properties.
 ///
@@ -363,6 +377,64 @@ impl SwhGraph {
         top_k_to_ndarray(py, result)
     }
 
+    /// Return a numpy ``uint64`` array with node-type frequencies,
+    /// computed in parallel.
+    ///
+    /// The array is indexed by ``PyNodeType`` values
+    /// (Content, Directory, Origin, Release, Revision, Snapshot).
+    #[pyo3(text_signature = "()")]
+    pub fn node_type_frequencies<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<u64>> {
+        let graph = &*self.graph;
+        let frequencies = py.detach(|| {
+            (0..graph.num_nodes())
+                .into_par_iter()
+                .with_min_len(graph.num_nodes().isqrt())
+                .fold(
+                    || [0_u64; NUM_NODE_TYPES],
+                    |mut counts, n| {
+                        let idx = node_type_index(graph.properties().node_type(n));
+                        counts[idx] += 1;
+                        counts
+                    },
+                )
+                .reduce(
+                    || [0_u64; NUM_NODE_TYPES],
+                    |mut left, right| {
+                        for i in 0..NUM_NODE_TYPES {
+                            left[i] += right[i];
+                        }
+                        left
+                    },
+                )
+        });
+        PyArray1::from_vec(py, frequencies.to_vec())
+    }
+
+    /// BFS over all connected components.
+    ///
+    /// Yields ``(root, parent, node, distance)`` tuples where *root*
+    /// identifies the BFS tree (starting node of the component),
+    /// *parent* is the node from which *node* was discovered (equal to
+    /// *node* for roots), and *distance* is the hop count from *root*.
+    #[pyo3(text_signature = "()")]
+    pub fn bfs(&self) -> PyBfsIterator {
+        PyBfsIterator::new(self.graph.clone(), false, 0)
+    }
+
+    /// BFS from a single starting node.
+    ///
+    /// Yields ``(root, parent, node, distance)`` tuples where *root*
+    /// is always the starting node, *parent* is the node from which
+    /// *node* was discovered (equal to *node* for the root), and
+    /// *distance* is the hop count from the starting node.
+    ///
+    /// Raises ``IndexError`` if *node* is out of range.
+    #[pyo3(text_signature = "(node)")]
+    pub fn bfs_from_node(&self, node: usize) -> PyResult<PyBfsIterator> {
+        check_node(node, self.graph.num_nodes())?;
+        Ok(PyBfsIterator::new(self.graph.clone(), true, node))
+    }
+
     /// Return a FilteredSwhGraph restricted to the given node types.
     ///
     /// The constraint string is a comma-separated list of type
@@ -432,6 +504,22 @@ impl FilteredSwhGraph {
     #[pyo3(text_signature = "()")]
     pub fn num_nodes(&self) -> usize {
         self.graph.num_nodes()
+    }
+
+    /// Return the number of nodes matching the node-type constraint.
+    ///
+    /// The count is computed in parallel by scanning all nodes.
+    #[pyo3(text_signature = "()")]
+    pub fn precise_num_nodes(&self, py: Python<'_>) -> usize {
+        let graph = &*self.graph;
+        let constraint = self.constraint;
+        py.detach(|| {
+            (0..graph.num_nodes())
+                .into_par_iter()
+                .with_min_len(graph.num_nodes().isqrt())
+                .map(|n| constraint.matches(graph.properties().node_type(n)) as usize)
+                .sum()
+        })
     }
 
     /// Return the number of successors matching the node-type constraint.
@@ -565,6 +653,44 @@ impl FilteredSwhGraph {
                 .collect::<Vec<u32>>()
         });
         PyArray1::from_vec(py, degrees)
+    }
+
+    /// Return a numpy ``uint64`` array with node-type frequencies,
+    /// computed in parallel.
+    ///
+    /// Only nodes matching the constraint are counted. The array is
+    /// indexed by ``PyNodeType`` values
+    /// (Content, Directory, Origin, Release, Revision, Snapshot).
+    #[pyo3(text_signature = "()")]
+    pub fn node_type_frequencies<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<u64>> {
+        let graph = &*self.graph;
+        let constraint = self.constraint;
+        let frequencies = py.detach(|| {
+            (0..graph.num_nodes())
+                .into_par_iter()
+                .with_min_len(graph.num_nodes().isqrt())
+                .fold(
+                    || [0_u64; NUM_NODE_TYPES],
+                    |mut counts, n| {
+                        let node_type = graph.properties().node_type(n);
+                        if constraint.matches(node_type) {
+                            let idx = node_type_index(node_type);
+                            counts[idx] += 1;
+                        }
+                        counts
+                    },
+                )
+                .reduce(
+                    || [0_u64; NUM_NODE_TYPES],
+                    |mut left, right| {
+                        for i in 0..NUM_NODE_TYPES {
+                            left[i] += right[i];
+                        }
+                        left
+                    },
+                )
+        });
+        PyArray1::from_vec(py, frequencies.to_vec())
     }
 
     /// Return the committer person ID, or ``None`` if not available.
@@ -734,6 +860,89 @@ impl FilteredSwhGraph {
     }
 }
 
+/// Iterator for breadth-first traversal.
+///
+/// Yields ``(root, parent, node, distance)`` tuples where *root*
+/// identifies the BFS tree, *parent* is the node from which *node*
+/// was discovered (equal to *node* for roots), and *distance* is the
+/// hop count from *root*.
+#[pyclass(unsendable)]
+pub struct PyBfsIterator {
+    graph: Rc<SwhBidirectionalGraph<MyProperties>>,
+    visited: BitVec<Vec<usize>>,
+    queue: VecDeque<(usize, usize, usize)>, // (parent, node, distance)
+    current_root: usize,
+    next_unvisited: usize,
+    num_nodes: usize,
+    single_component: bool,
+}
+
+impl PyBfsIterator {
+    fn new(
+        graph: Rc<SwhBidirectionalGraph<MyProperties>>,
+        single_component: bool,
+        start_node: usize,
+    ) -> Self {
+        let num_nodes = graph.num_nodes();
+        let mut visited = BitVec::<Vec<usize>>::new(num_nodes);
+        let mut queue = VecDeque::new();
+
+        if num_nodes > 0 {
+            visited.set(start_node, true);
+            queue.push_back((start_node, start_node, 0));
+        }
+
+        Self {
+            graph,
+            visited,
+            queue,
+            current_root: start_node,
+            next_unvisited: if single_component { num_nodes } else { 0 },
+            num_nodes,
+            single_component,
+        }
+    }
+}
+
+#[pymethods]
+impl PyBfsIterator {
+    fn __iter__(slf: PyRef<Self>) -> PyRef<Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> Option<(usize, usize, usize, usize)> {
+        loop {
+            if let Some((parent, node, distance)) = self.queue.pop_front() {
+                for succ in self.graph.successors(node) {
+                    if !self.visited.get(succ) {
+                        self.visited.set(succ, true);
+                        self.queue.push_back((node, succ, distance + 1));
+                    }
+                }
+                return Some((self.current_root, parent, node, distance));
+            }
+
+            if self.single_component {
+                return None;
+            }
+
+            // Find next unvisited node for a new BFS tree.
+            while self.next_unvisited < self.num_nodes && self.visited.get(self.next_unvisited) {
+                self.next_unvisited += 1;
+            }
+
+            if self.next_unvisited >= self.num_nodes {
+                return None;
+            }
+
+            let root = self.next_unvisited;
+            self.current_root = root;
+            self.visited.set(root, true);
+            self.queue.push_back((root, root, 0));
+        }
+    }
+}
+
 #[pymethods]
 impl ContributorNamesMap {
     /// Load a contributor names map from the given binary file.
@@ -779,5 +988,6 @@ fn _webgraph_swh(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ContributorNamesMap>()?;
     m.add_class::<PyNodeType>()?;
     m.add_class::<PySuccessorsIterator>()?;
+    m.add_class::<PyBfsIterator>()?;
     Ok(())
 }
