@@ -1,6 +1,7 @@
 use epserde::deser::{DeserInner, ReaderWithPos, check_header};
 use numpy::PyArray1;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use rayon::prelude::*;
 use std::collections::VecDeque;
 use std::fs::File;
@@ -44,6 +45,20 @@ fn node_type_index(node_type: NodeType) -> usize {
         NodeType::Revision => 4,
         NodeType::Snapshot => 5,
     }
+}
+
+fn node_type_freqs_dict<'py>(
+    py: Python<'py>,
+    frequencies: [u64; NUM_NODE_TYPES],
+) -> PyResult<Bound<'py, PyDict>> {
+    let freqs = PyDict::new(py);
+    freqs.set_item("Content", frequencies[0])?;
+    freqs.set_item("Directory", frequencies[1])?;
+    freqs.set_item("Origin", frequencies[2])?;
+    freqs.set_item("Release", frequencies[3])?;
+    freqs.set_item("Revision", frequencies[4])?;
+    freqs.set_item("Snapshot", frequencies[5])?;
+    Ok(freqs)
 }
 
 /// A bidirectional Software Heritage graph with node properties.
@@ -377,13 +392,12 @@ impl SwhGraph {
         top_k_to_ndarray(py, result)
     }
 
-    /// Return a numpy ``uint64`` array with node-type frequencies,
-    /// computed in parallel.
+    /// Return node-type frequencies as a dictionary, computed in parallel.
     ///
-    /// The array is indexed by ``PyNodeType`` values
-    /// (Content, Directory, Origin, Release, Revision, Snapshot).
+    /// Dictionary keys are node-type names (``Content``, ``Directory``,
+    /// ``Origin``, ``Release``, ``Revision``, ``Snapshot``).
     #[pyo3(text_signature = "()")]
-    pub fn node_type_frequencies<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<u64>> {
+    pub fn node_type_freqs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let graph = &*self.graph;
         let frequencies = py.detach(|| {
             (0..graph.num_nodes())
@@ -407,7 +421,7 @@ impl SwhGraph {
                     },
                 )
         });
-        PyArray1::from_vec(py, frequencies.to_vec())
+        node_type_freqs_dict(py, frequencies)
     }
 
     /// BFS over all connected components.
@@ -510,7 +524,7 @@ impl FilteredSwhGraph {
     ///
     /// The count is computed in parallel by scanning all nodes.
     #[pyo3(text_signature = "()")]
-    pub fn precise_num_nodes(&self, py: Python<'_>) -> usize {
+    pub fn num_nodes_sub(&self, py: Python<'_>) -> usize {
         let graph = &*self.graph;
         let constraint = self.constraint;
         py.detach(|| {
@@ -655,14 +669,13 @@ impl FilteredSwhGraph {
         PyArray1::from_vec(py, degrees)
     }
 
-    /// Return a numpy ``uint64`` array with node-type frequencies,
-    /// computed in parallel.
+    /// Return node-type frequencies as a dictionary, computed in parallel.
     ///
-    /// Only nodes matching the constraint are counted. The array is
-    /// indexed by ``PyNodeType`` values
-    /// (Content, Directory, Origin, Release, Revision, Snapshot).
+    /// Only nodes matching the constraint are counted. Dictionary keys are
+    /// node-type names (``Content``, ``Directory``, ``Origin``, ``Release``,
+    /// ``Revision``, ``Snapshot``).
     #[pyo3(text_signature = "()")]
-    pub fn node_type_frequencies<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<u64>> {
+    pub fn node_type_freqs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let graph = &*self.graph;
         let constraint = self.constraint;
         let frequencies = py.detach(|| {
@@ -690,7 +703,7 @@ impl FilteredSwhGraph {
                     },
                 )
         });
-        PyArray1::from_vec(py, frequencies.to_vec())
+        node_type_freqs_dict(py, frequencies)
     }
 
     /// Return the committer person ID, or ``None`` if not available.
