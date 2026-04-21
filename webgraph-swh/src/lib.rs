@@ -243,6 +243,21 @@ impl SwhGraph {
         Ok(self.graph.properties().committer_id(node))
     }
 
+    /// Return a node whose committer person ID matches *committer_id*.
+    ///
+    /// Scans nodes in parallel and may stop early. Returns ``None`` if no
+    /// match is found.
+    #[pyo3(text_signature = "(committer_id)")]
+    pub fn find_commit_from_committer(&self, py: Python<'_>, committer_id: u32) -> Option<usize> {
+        let graph = &*self.graph;
+        py.detach(|| {
+            (0..graph.num_nodes())
+                .into_par_iter()
+                .with_min_len(1000)
+                .find_any(|&n| graph.properties().committer_id(n) == Some(committer_id))
+        })
+    }
+
     /// Return the author person ID, or ``None`` if not available.
     ///
     /// Raises ``IndexError`` if *node* is out of range.
@@ -250,6 +265,21 @@ impl SwhGraph {
     pub fn author_id(&self, node: usize) -> PyResult<Option<u32>> {
         check_node(node, self.graph.num_nodes())?;
         Ok(self.graph.properties().author_id(node))
+    }
+
+    /// Return a node whose author person ID matches *author_id*.
+    ///
+    /// Scans nodes in parallel and may stop early. Returns ``None`` if no
+    /// match is found.
+    #[pyo3(text_signature = "(author_id)")]
+    pub fn find_commit_from_author(&self, py: Python<'_>, author_id: u32) -> Option<usize> {
+        let graph = &*self.graph;
+        py.detach(|| {
+            (0..graph.num_nodes())
+                .into_par_iter()
+                .with_min_len(1000)
+                .find_any(|&n| graph.properties().author_id(n) == Some(author_id))
+        })
     }
 
     /// Return the node type as a ``PyNodeType`` enum value.
@@ -703,6 +733,26 @@ impl FilteredSwhGraph {
         Ok(self.graph.properties().committer_id(node))
     }
 
+    /// Return a node whose committer person ID matches *committer_id*.
+    ///
+    /// Scans nodes in parallel and may stop early. Returns ``None`` if no
+    /// match is found.
+    /// Only nodes matching the node-type constraint are considered.
+    #[pyo3(text_signature = "(committer_id)")]
+    pub fn find_commit_from_committer(&self, py: Python<'_>, committer_id: u32) -> Option<usize> {
+        let graph = &*self.graph;
+        let constraint = self.constraint;
+        py.detach(|| {
+            (0..graph.num_nodes())
+                .into_par_iter()
+                .with_min_len(graph.num_nodes().isqrt())
+                .find_any(|&n| {
+                    constraint.matches(graph.properties().node_type(n))
+                        && graph.properties().committer_id(n) == Some(committer_id)
+                })
+        })
+    }
+
     /// Return the author person ID, or ``None`` if not available.
     ///
     /// Raises ``IndexError`` if *node* is out of range, or ``ValueError``
@@ -711,6 +761,26 @@ impl FilteredSwhGraph {
     pub fn author_id(&self, node: usize) -> PyResult<Option<u32>> {
         self.check_node(node)?;
         Ok(self.graph.properties().author_id(node))
+    }
+
+    /// Return a node whose author person ID matches *author_id*.
+    ///
+    /// Scans nodes in parallel and may stop early. Returns ``None`` if no
+    /// match is found.
+    /// Only nodes matching the node-type constraint are considered.
+    #[pyo3(text_signature = "(author_id)")]
+    pub fn find_commit_from_author(&self, py: Python<'_>, author_id: u32) -> Option<usize> {
+        let graph = &*self.graph;
+        let constraint = self.constraint;
+        py.detach(|| {
+            (0..graph.num_nodes())
+                .into_par_iter()
+                .with_min_len(graph.num_nodes().isqrt())
+                .find_any(|&n| {
+                    constraint.matches(graph.properties().node_type(n))
+                        && graph.properties().author_id(n) == Some(author_id)
+                })
+        })
     }
 
     /// Return the node type as a ``PyNodeType`` enum value.

@@ -78,8 +78,25 @@ class SwhGraph:
         """Return the committer person ID, or ``None`` if not available."""
         ...
 
+    def find_commit_from_committer(self, committer_id: int) -> int | None:
+        """Return a node whose committer person ID matches
+        *committer_id*.
+
+        Scans nodes in parallel and may stop early. Returns ``None`` if no
+        match is found.
+        """
+        ...
+
     def author_id(self, node: int) -> int | None:
         """Return the author person ID, or ``None`` if not available."""
+        ...
+
+    def find_commit_from_author(self, author_id: int) -> int | None:
+        """Return a node whose author person ID matches *author_id*.
+
+        Scans nodes in parallel and may stop early. Returns ``None`` if no
+        match is found.
+        """
         ...
 
     def node_type(self, node: int) -> PyNodeType:
@@ -234,8 +251,27 @@ class FilteredSwhGraph:
         """Return the committer person ID, or ``None`` if not available."""
         ...
 
+    def find_commit_from_committer(self, committer_id: int) -> int | None:
+        """Return a node whose committer person ID matches
+        *committer_id*.
+
+        Scans nodes in parallel and may stop early. Returns ``None`` if no
+        match is found.
+        Only nodes matching the node-type constraint are considered.
+        """
+        ...
+
     def author_id(self, node: int) -> int | None:
         """Return the author person ID, or ``None`` if not available."""
+        ...
+
+    def find_commit_from_author(self, author_id: int) -> int | None:
+        """Return a node whose author person ID matches *author_id*.
+
+        Scans nodes in parallel and may stop early. Returns ``None`` if no
+        match is found.
+        Only nodes matching the node-type constraint are considered.
+        """
         ...
 
     def node_type(self, node: int) -> PyNodeType:
