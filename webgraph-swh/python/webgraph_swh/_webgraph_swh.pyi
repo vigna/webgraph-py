@@ -153,9 +153,11 @@ class SwhGraph:
         """
         ...
 
-    def node_type_frequencies(self) -> npt.NDArray[np.uint64]:
-        """Return a numpy ``uint64`` array indexed by ``PyNodeType`` values,
-        with frequencies of each node type.
+    def node_type_freqs(self) -> dict[str, int]:
+        """Return node-type frequencies as a dictionary.
+
+        Keys are type names: ``Content``, ``Directory``, ``Origin``,
+        ``Release``, ``Revision``, ``Snapshot``.
         """
         ...
 
@@ -209,7 +211,7 @@ class FilteredSwhGraph:
         """Return the number of nodes in the underlying (unfiltered) graph."""
         ...
 
-    def precise_num_nodes(self) -> int:
+    def num_nodes_sub(self) -> int:
         """Return the number of nodes matching the node-type constraint."""
         ...
 
@@ -241,9 +243,12 @@ class FilteredSwhGraph:
         """
         ...
 
-    def node_type_frequencies(self) -> npt.NDArray[np.uint64]:
-        """Return a numpy ``uint64`` array indexed by ``PyNodeType`` values,
-        with frequencies of matching nodes for each node type.
+    def node_type_freqs(self) -> dict[str, int]:
+        """Return node-type frequencies as a dictionary.
+
+        Only nodes matching the constraint are counted. Keys are type names:
+        ``Content``, ``Directory``, ``Origin``, ``Release``, ``Revision``,
+        ``Snapshot``.
         """
         ...
 
