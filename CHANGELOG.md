@@ -1,5 +1,19 @@
 # Change Log
 
+## [0.2.0] - 2026-10-12
+
+### Changed
+
+- `webgraph` now uses the Rust `webgraph` 0.7.0 crate, whose Elias–Fano
+  offsets use a new file format: all `.ef` files must be rebuilt with
+  `webgraph build ef` (`webgraph-cli` 0.5.0 or later). `webgraph-swh` is
+  unaffected, as it follows the versions used by `swh-graph`.
+
+### Improved
+
+- The error raised by `BvGraph` when loading fails now reports the whole
+  chain of causes (e.g., an `.ef` file in an obsolete format).
+
 ## [0.1.4] - 2026-07-23
 
 ### Changed

@@ -1,6 +1,6 @@
 [package]
 name = "webgraph-swh-py"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2024"
 authors = [
 	"Dario Moschetti <dariomos.dm@gmail.com>",
@@ -17,7 +17,8 @@ crate-type = ["cdylib"]
 pyo3 = { workspace = true }
 numpy = { workspace = true }
 rayon = { workspace = true }
-sux = { workspace = true }
+# sux and epserde must match the versions used by swh-graph
+sux = "0.12.2"
 swh-graph = "11.0.0"
 epserde = "0.12.1"
 webgraph-py-common = { path = "../webgraph-py-common" }

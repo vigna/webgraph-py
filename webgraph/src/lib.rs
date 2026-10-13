@@ -37,7 +37,9 @@ impl BvGraph {
     pub fn new(basename: String) -> PyResult<Self> {
         let graph = webgraph::graphs::bvgraph::BvGraph::with_basename(&basename)
             .load()
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+            // {:#} prints the whole anyhow chain, which contains the cause
+            // (e.g., an .ef file in an obsolete format)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{e:#}")))?;
         Ok(Self {
             graph: Rc::new(graph),
             basename,

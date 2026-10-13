@@ -3,14 +3,13 @@ members = ["webgraph", "webgraph-swh", "webgraph-py-common"]
 resolver = "3"
 
 [workspace.dependencies]
-pyo3 = { version = "0.28.2", features = ["extension-module"] }
-numpy = "0.28.0"
+pyo3 = { version = "0.29.3", features = ["extension-module"] }
+numpy = "0.29.0"
 rayon = "1.11.0"
 dary_heap = "0.3.8"
-dsi-bitstream = "0.7.0"
-sux = "0.12.2"
-webgraph = { git = "https://github.com/vigna/webgraph-rs.git", rev = "bcdcb4909aadf0f2cebdafea4335d408edf96035" }
-
+dsi-bitstream = "0.10.1"
+sux = "0.15.0"
+webgraph = "0.7.0"
 
 [profile.release]
 opt-level = 3
